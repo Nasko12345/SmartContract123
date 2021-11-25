@@ -1,0 +1,52 @@
+{
+  "name": "PowerBullGames",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm run clean && npx hardhat test",
+    "c": "npx hardhat compile",
+    "clean": "npx hardhat clean",
+    "f": "npx solpp ./contracts/PBull.sol --output ./flattened.sol",
+    "deploy_kovan": "npx hardhat deploy --network kovan --reset",
+    "deploy_local": "npx hardhat deploy --network localhost --reset",
+    "deploy_rinkeby": "npx hardhat deploy --network rinkeby --reset",
+    "deploy_ropsten": "npx hardhat deploy --network ropsten --reset",
+    "deploy_bsc_testnet": "npx hardhat deploy --network bsc_testnet --reset",
+    "deploy_eth_mainnet": "npx hardhat deploy --network eth_mainnet",
+    "----deploy_bsc_mainnet-----####": "npx hardhat deploy --network bsc_mainnet",
+    "lint:js": "npx eslint . --fix",
+    "lint:sol": "npx solhint contracts/*.sol",
+    "lint": "npm run prettier && npm run lint:js && npm run lint:sol",
+    "prettier": "npx prettier --write 'contracts/**/*.sol'",
+    "run_node": "npx hardhat node"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "npm:hardhat-deploy-ethers@^0.3.0-beta.7",
+    "@nomiclabs/hardhat-etherscan": "^2.1.2",
+    "@nomiclabs/hardhat-solpp": "^2.0.0",
+    "@nomiclabs/hardhat-waffle": "^2.0.1",
+    "@openzeppelin/contracts": "^4.3.2",
+    "@uniswap/sdk": "^3.0.3",
+    "bn.js": "^5.2.0",
+    "chai": "^4.3.4",
+    "colors": "^1.4.0",
+    "eslint": "^5.16.0",
+    "ethereum-waffle": "^3.3.0",
+    "ethers": "^5.1.4",
+    "hardhat": "^2.2.1",
+    "hardhat-contract-sizer": "^2.0.3",
+    "hardhat-deploy": "^0.7.5",
+    "prettier": "2.3.1",
+    "rimraf": "^2.7.1",
+    "sleep": "^6.3.0",
+    "solhint": "^3.3.6",
+    "solpp": "^0.10.2",
+    "web3": "^1.3.5"
+  },
+  "dependencies": {
+    "hardhat-ethernal": "^0.3.10"
+  }
+}
