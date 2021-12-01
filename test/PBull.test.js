@@ -20,8 +20,8 @@ describe(descTitle('Token Contract Test'), function () {
 
     let DECIAMLS = 18;
     let TOTAL_SUPPLY = 26_000_000;
-    let TOKEN_NAME = "PowerBull";
-    let TOKEN_SYMBOL = "PBULL";
+    let TOKEN_NAME = "Luckie Jodjie 2";
+    let TOKEN_SYMBOL = "LLJ";
 
     let DECIAMLS_BN = BN.from(DECIAMLS)
 
@@ -86,16 +86,6 @@ describe(descTitle('Token Contract Test'), function () {
         });
 
 
-        it(`Should add extra fee to user account`, async  () => {
-            
-            let extraFee = 200; //2%
-
-            let addExtraFeeTx = await tokenContract.setPerAccountExtraTax(randomWallet.address, extraFee)
-            
-            await addExtraFeeTx.wait();
-
-            expect((await tokenContract.perAccountExtraTax(randomWallet.address)).toString()).to.equal(extraFee.toString())
-        });
 
         // lets check if the fee matches to what we want 
         it('Should match total enabled fee sum', async () => {
@@ -104,20 +94,20 @@ describe(descTitle('Token Contract Test'), function () {
             let fee = BN.from('0');
 
             // get all the fee
-            if((await tokenContract.isAutoBurnEnabled())) fee = fee.add(await tokenContract.autoBurnFee());
+            if((await tokenContract.isDevFeeEnabled())) fee = fee.add(await tokenContract.devFee());
+            if((await tokenContract.isMarketingFeeEnabled())) fee = fee.add(await tokenContract.marketingFee());
             if((await tokenContract.isAutoLiquidityEnabled())) fee = fee.add(await tokenContract.autoLiquidityFee());
             if((await tokenContract.isHoldlersRewardEnabled())) fee = fee.add(await tokenContract.holdlersRewardFee());
-            if((await tokenContract.isLiquidityProvidersIncentiveEnabled())) fee = fee.add(await tokenContract.liquidityProvidersIncentiveFee());
             if((await tokenContract.isBuyBackEnabled())) fee = fee.add(await tokenContract.buyBackFee());
             if((await tokenContract.isSellTaxEnabled())) fee = fee.add(await tokenContract.sellTaxFee());
 
             //lets get user based fee 
-            let accountExtraTax = await tokenContract.perAccountExtraTax(randomWallet.address)
+            //let accountExtraTax = await tokenContract.perAccountExtraTax(randomWallet.address)
 
-            fee = fee.add(accountExtraTax);
+            //fee = fee.add(accountExtraTax);
 
             // if expected fee is met
-            expect((await tokenContract.getAccountFee(account.address)).toString()).to.equal(fee.toString());
+            expect((await tokenContract.getTotalFee()).toString()).to.equal(fee.toString());
         });
         
     }) //end token basics
@@ -139,12 +129,12 @@ describe(descTitle('Token Contract Test'), function () {
         });
 
         // excludedFromMaxTxAmountLimit
-        
+        /*
         it(`Should  exclude from max_tx_amount_limit`, async  () => {
             let excludeFromMaxTxAmountLimitTx = await tokenContract.excludeFromMaxTxAmountLimit(randomWallet.address, true)
             await excludeFromMaxTxAmountLimitTx.wait();
             expect((await tokenContract.excludedFromMaxTxAmountLimit(randomWallet.address))).to.equal(true)
-        });
+        });*/
 
 
         ////////////////// Remove from excludes
@@ -162,12 +152,12 @@ describe(descTitle('Token Contract Test'), function () {
             expect((await tokenContract.excludedFromRewards(randomWallet.address))).to.equal(false)
         });
 
-        // excludedFromMaxTxAmountLimit
+        /*/ excludedFromMaxTxAmountLimit
         it(`Should remove  from exclude  max_tx_amount_limit`, async  () => {
             let excludeFromMaxTxAmountLimitTx = await tokenContract.excludeFromMaxTxAmountLimit(randomWallet.address, false)
             await excludeFromMaxTxAmountLimitTx.wait();
             expect((await tokenContract.excludedFromMaxTxAmountLimit(randomWallet.address))).to.equal(false)
-        });
+        });*/
 
 
         // send transaction with fee
@@ -198,7 +188,7 @@ describe(descTitle('Token Contract Test'), function () {
             expect((await tokenContract.balanceOf(randomWallet.address)).toString()).to.equal(expectedBalance.toString())
         });
 
-        
+        /*
         it(`Should pass if transaction amount exceeds max_tx_amount_limit`, async  () => {
 
             let excludeFromMaxTxAmountLimitTx = await tokenContract.excludeFromMaxTxAmountLimit(account.address, false)
@@ -319,9 +309,9 @@ describe(descTitle('Token Contract Test'), function () {
             
             expect( accountThrottleInfo.timeIntervalPerTx.toNumber()  ).to.equal( 0 );
         });
-
+        */
     }); //end limits, throttles and feees
-
+    
 
     ///////// Reward system
     describe(descTitle('Test Reward System'), async  () => {
@@ -352,7 +342,7 @@ describe(descTitle('Token Contract Test'), function () {
             expect( (await tokenContract.minExpectedHoldlPeriod()).toNumber()  ).to.equal( maxHoldlePeriod );
         });
 
-        /*/lets now set the setMinExpectedHoldlPeriod
+        //lets now set the setMinExpectedHoldlPeriod
         it(`Should match computed results account will get `, async  () => {
 
             let rewardStartDelay = 0; //10 secs
@@ -423,7 +413,7 @@ describe(descTitle('Token Contract Test'), function () {
 
             //expect((await tokenContract.getReward(rewardableUserWallet.address)).toString()).to.equal(reward.toString());
             expect((await tokenContract.getReward(rewardableUserWallet.address)).toString()).to.equal(finalReward.toString());
-        });*/
+        });
         
     }); /////// End Reward system
 

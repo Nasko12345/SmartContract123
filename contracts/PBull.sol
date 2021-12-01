@@ -22,51 +22,12 @@ import "./interfaces/ISwapEngine.sol";
 contract PBull is   Context, Ownable, ERC20, Commons {
 
     event Receive(address _sender, uint256 _amount);
-    event SetUniSwapRouter(address indexed _routerAddress);
-    event SetAutoBurnFee(uint256 _value);
-    event SetHoldlersRewardFee(uint256 _value);
-    event SetLiquidityProvidersIncentiveFee(uint256 _value);
-    event SetAutoLiquidityFee(uint256 _value);
-    event SetAutoLiquidityOwner(address indexed _account);
-    event AddMinter(address indexed _account);
-    event RemoveMinter(address indexed _account);
-    event SetTokenBurnStrategyContract(address indexed _contractAddress);
-    event EnableBurn(bool _option);
-    event EnableAutoLiquidity(bool _option);
-    event EnableHoldlersReward(bool _option);
-    event EnableLiquidityProvidersIncentive(bool _option);
-    event SetHoldlersRewardComputer(address indexed _contractAddress);
-    event SetMaxTxAmountLimitPercent(uint256  _value);
-    event EnableMaxTxAmountLimit(bool _option);
-    //event EnableMaxBalanceLimit(bool _option);
-    event SetLiquidityProvidersIncentiveWallet(address indexed _account);
-    event SetMinAmountBeforeAutoLiquidity(uint256 _amount);
-    event ReleaseAccountReward(address indexed _account, uint256 _amount);
-    event ExcludeFromFees(address indexed _account, bool _option);
-    event SetSwapEngine(address indexed _contractAddress);
-    event ExcludeFromRewards(address indexed _account, bool _option);
-    event ExcludeFromMaxTxAmountLimit(address indexed _account, bool _option);
-    event EnableBuyBack(bool _option);
-    event SetBuyBackFee(uint256 _value);
-    event SetMinAmountBeforeAutoBurn(uint256 _amount);
-    event SetPercentageShareOfHoldlersRewardsForReservedPool(uint256 _valueBps);
-    event SetMinPercentageOfholdlersRewardReservedPoolToMainPool(uint256 _valueBps);
-    event ThrottleAccount(address indexed _account, uint256 _amountPerTx, uint256 _txIntervals);
-    event UnThrottleAccountTx(address indexed _account);
-    event EnableSellTax(bool _option);
-    event SetSellTaxFee(uint256 _valueBps);
-    event SetTxTypeForMaxTxAmountLimit(bytes32 _txType);
-    event ExcludeFromPaused(address indexed _account, bool _option);
-    event PauseContract(bool _option);
-    event SetPerAccountExtraTax(address indexed _account, uint256 _valueBps);
-    event SetMinAmountBeforeSellingTokenForBuyBack(uint256 _amount);
-    event SetMinAmountBeforeSellingETHForBuyBack(uint256 _amount);
-    event SetBuyBackETHAmountSplitDivisor(uint256 _value);
+
 
     using SafeMath for uint256;
 
-    string  private constant  _tokenName                          =    "PowerBull";
-    string  private constant  _tokenSymbol                        =    "PBULL";
+    string  private constant  _tokenName                          =    "Luckie Jodjie 4";
+    string  private constant  _tokenSymbol                        =    "LLJ4";
     uint8   private constant  _tokenDecimals                      =     18;
     uint256 private constant  _tokenSupply                        =     26_000_000  * (10 ** _tokenDecimals); // 25m
 
@@ -75,39 +36,30 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     uint256 public constant  _initialPercentOfTokensForHoldlersRewardPool =  100; /// 1% of total supply
 
     // reward token 
-    address rewardTokenAddress     =     0xc7AD46e0b8a400Bb3C915120d284AafbA8fc4735; // cake token                 
+    address rewardTokenAddress     =     0x4F96Fe3b7A6Cf9725f59d353F723c1bDb64CA6Aa; // wbnb token                 
     
     ERC20 rewardTokenContract = ERC20(rewardTokenAddress);
 
     // tax 
-    uint256 marketingFee      =     100; // 100 = 1%
-    uint256 devFee            =     100; // 100 = 1%
+    uint256 public  marketingFee      =     100; // 100 = 1%
+    uint256 public  devFee            =     100; // 100 = 1%
 
     // set the dev and marketing wallet here, default is deployer
     address payable devAndMarketingWallet;
     
     //address payable devWallet               =       0x0;
 
-    bool public isAutoBurnEnabled                                  =  true;
     bool public isAutoLiquidityEnabled                             =  true;
     bool public isHoldlersRewardEnabled                            =  true; 
-    bool public isLiquidityProvidersIncentiveEnabled               =  true;
     bool public isBuyBackEnabled                                   =  true;
     bool public isSellTaxEnabled                                   =  true; 
     bool public isMarketingFeeEnabled                              =  true;  
     bool public isDevFeeEnabled                                    =  true;     
 
-    //limits 
-    bool public isMaxTxAmountLimitEnabled                           = true;
-
-    bool public isTeamsEnabled                                      = true;
-
 
     //using basis point, multiple number by 100  
     uint256  public  holdlersRewardFee                               =  100;     // 1% for holdlers reward pool
-    uint256  public  liquidityProvidersIncentiveFee                  =  100;    //  1% for liquidity providers incentives
     uint256  public  autoLiquidityFee                                =  100;     // 1% fee charged on tx for adding liquidity pool
-    uint256  public  autoBurnFee                                     =  50;      //  1% will be burned
     uint256  public  buyBackFee                                      =  100;     // 1% will be used for buyback
     uint256  public  sellTaxFee                                      =  50;    //  1% a sell tax fee, which applies to sell only
     
@@ -150,9 +102,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     // liquidity owner
     address public autoLiquidityOwner;
 
-    //max transfer amount  ( anti whale check ) in BPS (Basis Point System )
-    uint256 public maxTxAmountLimitPercent                                  =  1000; //10% of total supply 
-
     //minimum amount before adding auto liquidity
     uint256 public minAmountBeforeAutoLiquidity                             =   60_000 * (10 ** _tokenDecimals);    
 
@@ -165,22 +114,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     //accounts excluded from fees
     mapping(address => bool) public excludedFromFees;
     mapping(address => bool) public excludedFromRewards;
-    mapping(address => bool) public excludedFromMaxTxAmountLimit;
     mapping(address => bool) public excludedFromPausable;
-    
-    //throttle acct tx
-    mapping(address => StructsDef.AccountThrottleInfo) public throttledAccounts;
-
-    // extra tax Per account basis
-    mapping(address => uint256) public perAccountExtraTax;
-
-    // burn history info
-    //BurnInfo[] public  burnHistoryInfo;
-
-    //uint256 public totalTokensBurned;
-
-    //permitted minters 
-    mapping(address => bool)  public  minters;
 
     // permit nonces
     mapping(address => uint) public nonces;
@@ -246,13 +180,13 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         //excludes for 
         excludedFromFees[address(this)]                 =       true;
         excludedFromRewards[address(this)]              =       true;
-        excludedFromMaxTxAmountLimit[address(this)]     =       true;
         excludedFromPausable[address(this)]             =       true;
 
         //excludes for owner
         excludedFromFees[_msgSender()]                  =       true;
         excludedFromPausable[_msgSender()]              =       true;
-        excludedFromMaxTxAmountLimit[_msgSender()]      =       true;
+        excludedFromPausable[_msgSender()]              =       true;
+
 
         // set auto liquidity owner
         autoLiquidityOwner                              =       _msgSender();
@@ -300,7 +234,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         // exclude swap engine from all limits
         excludedFromFees[_swapEngine]                  =  true;
         excludedFromRewards[_swapEngine]               =  true;
-        excludedFromMaxTxAmountLimit[_swapEngine]      =  true;
         excludedFromPausable[_swapEngine]              =  true;
 
         holdlersRewardComputer = IHoldlersRewardComputer(_holdlersRewardComputer);
@@ -518,71 +451,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         return holdlersInfo[_account];
     }
 
- 
-    /*//////////////////////// START MINT OPERATIONS ///////////////////
-
-    modifier onlyMinter {
-        require(minters[_msgSender()],"PBULL: ONLY_MINTER_PERMITED");
-        _;
-    }
-
-    /**
-     * mint new tokens
-     * @param account - the account to mint token to 
-     * @param amount - total number of tokens to mint
-     *
-    function mint(address account, uint256 amount) public onlyMinter {
-
-        require(amount > 0,"PBULL: ZERO_AMOUNT");
-
-        // before mint, lets check if the account initial balance is 0, then we have a new holder
-        if(balanceOf(account) == 0) {
-            totalTokenHolders = totalTokenHolders.add(1);
-        }
-
-        _mint(account, amount);
-    }
-
-    /**
-     * @dev add or remove minter 
-     * @param _account the account to add or remove minter
-     * @param _option  true to enable as minter, false to disable as minter
-     *
-    function setMinter(address _account, bool _option) public onlyOwner {
-        require(_account != address(0),"PBULL: INVALID_ADDRESS");
-        minters[_account] = _option;
-        emit AddMinter(_account);
-    }
-    */
-    //////////////////////////////// END MINT OPERATIONS //////////////////////
-
-
-    /**
-     * @dev token burn operation override 
-     * @param account the account to burn token from
-     * @param amount the total number of tokens to burn
-     *
-    function _burn(address account, uint256 amount) override internal virtual {
-
-        super._burn(account,amount);
-
-        //calculate the no of token holders
-        if(balanceOf(account) == 0 && totalTokenHolders > 0){
-            totalTokenHolders = totalTokenHolders.sub(1);
-        }
-
-        //lets check where the burn is from
-        if(account == _tokenAddress || account == address(swapEngine)){
-            if(autoBurnPool > amount){
-                autoBurnPool = autoBurnPool.sub(amount);
-            } else {
-                autoBurnPool = 0;
-            }
-        }
-
-        totalTokensBurned = totalTokensBurned.add(amount);
-    } //end burn override
-    */
 
 
     //////////////////////// START OPTION SETTER /////////////////
@@ -593,18 +461,9 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setAutoLiquidityOwner(address _account) public onlyOwner {
          autoLiquidityOwner = _account;
-         emit SetAutoLiquidityOwner(_account);
     }
 
 
-    /**
-     * @dev enable or disable auto burn 
-     * @param _option true to enable, false to disable
-     */
-    function enableAutoBurn(bool _option) public onlyOwner {
-        isAutoBurnEnabled = _option;
-        emit EnableBurn(_option);
-    }
 
 
     /**
@@ -613,7 +472,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function enableBuyBack(bool _option) public onlyOwner {
         isBuyBackEnabled = _option;
-        emit EnableBuyBack(_option);
     }
 
     /**
@@ -622,7 +480,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function enableAutoLiquidity(bool _option) public onlyOwner {
         isAutoLiquidityEnabled = _option;
-        emit EnableAutoLiquidity(_option);
     }
 
 
@@ -632,25 +489,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function enableHoldlersReward(bool _option) public onlyOwner {
         isHoldlersRewardEnabled = _option;
-        emit EnableHoldlersReward(_option);
-    }
-
-    /**
-     *  @dev enable or disable liquidity providers incentives
-     *  @param _option true to enable, false to disable
-     */
-    function enableLiquidityProvidersIncentive(bool _option) public onlyOwner {
-        isLiquidityProvidersIncentiveEnabled = _option;
-        emit EnableLiquidityProvidersIncentive(_option);
-    }
-
-    /**
-     *  @dev enable or disable max transaction amount limit
-     *  @param _option true to enable, false to disable
-     */
-    function enableMaxTxAmountLimit(bool _option) public onlyOwner {
-        isMaxTxAmountLimitEnabled = _option;
-        emit EnableMaxTxAmountLimit(_option);
     }
 
 
@@ -660,7 +498,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function enableSellTax(bool _option) public onlyOwner {
         isSellTaxEnabled = _option;
-        emit EnableSellTax(_option);
     }
 
     /**
@@ -668,11 +505,9 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      * @param _option true to enable, false to disable
      */
     function enableAllFees(bool _option) public onlyOwner {
-        isAutoBurnEnabled                       = _option;
         isBuyBackEnabled                        = _option;
         isAutoLiquidityEnabled                  = _option;
         isHoldlersRewardEnabled                 = _option;
-        isLiquidityProvidersIncentiveEnabled    = _option;
         isSellTaxEnabled                        = _option;
         isDevFeeEnabled                         = _option;
         isMarketingFeeEnabled                   = _option;
@@ -682,58 +517,9 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     //////////////////// END OPTION SETTER //////////
 
 
-
-    ////////////// ACCOUNT TX THROTTLE FOR BOTS //////////////
-
-    /**
-     * @dev throttle account tx 
-     * @param _account an address of the account to throttle
-     * @param _txAmountLimitPercent max amount per tx in percentage in relative to totalSupply a throttled account can have
-     * @param _txIntervals time interval per transaction
-     */
-    function throttleAccountTx(
-        address _account, 
-        uint256 _txAmountLimitPercent,
-        uint256 _txIntervals
-    ) public onlyOwner {
-
-        require(_account != address(0),"PBULL: INVALID_ACCOUNT_ADDRESS");
-
-        // if the _amountPerTx is greater the maxTxAmount, revert
-        require(_txAmountLimitPercent <= maxTxAmountLimitPercent, "PBULL: _txAmountLimitPercent exceeds maxTxAmountLimitPercent");
-
-        throttledAccounts[_account] = StructsDef.AccountThrottleInfo(_txAmountLimitPercent, _txIntervals, 0);
-
-        emit ThrottleAccount(_account, _txAmountLimitPercent, _txIntervals);
-    } //end function
-
-    /**
-     * @dev unthrottle account tx
-     * @param _account the account address to unthrottle its tx
-     */
-    function unThrottleAccountTx(
-        address _account
-    ) public onlyOwner {
-
-        require(_account != address(0),"PBULL: INVALID_ACCOUNT_ADDRESS");
-
-        delete  throttledAccounts[_account];
-
-        emit UnThrottleAccountTx(_account);
-    } //end function
-
-    ////////////////// END THROTTLE BOTS /////////////////////
-
+   
     ///////////////////// START  SETTER ///////////////
      
-     /**
-     * @dev set the auto burn fee
-     * @param _valueBps the fee value in basis point system
-     */
-    function setAutoBurnFee(uint256 _valueBps) public onlyOwner { 
-        autoBurnFee = _valueBps;
-        emit SetAutoBurnFee(_valueBps);
-    }
 
     /**
      * @dev set the auto buyback fee
@@ -741,7 +527,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setBuyBackFee(uint256 _valueBps) public onlyOwner { 
         buyBackFee = _valueBps;
-        emit SetBuyBackFee(_valueBps);
     }
 
     /**
@@ -750,18 +535,8 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setHoldlersRewardFee(uint256 _valueBps) public onlyOwner { 
         holdlersRewardFee = _valueBps;
-        emit SetHoldlersRewardFee(_valueBps);
     }
 
-
-    /**
-     * @dev set liquidity providers incentive fee
-     * @param _valueBps the fee value in basis point system
-     */
-    function setLiquidityProvidersIncentiveFee(uint256 _valueBps) public onlyOwner { 
-        liquidityProvidersIncentiveFee = _valueBps;
-        emit SetLiquidityProvidersIncentiveFee(_valueBps);
-    }
 
     /**
      * @dev auto liquidity fee 
@@ -769,7 +544,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setAutoLiquidityFee(uint256 _valueBps) public onlyOwner { 
         autoLiquidityFee = _valueBps;
-        emit SetAutoLiquidityFee(_valueBps);
     }
 
 
@@ -779,29 +553,9 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setSellTaxFee(uint256 _valueBps) public onlyOwner { 
         sellTaxFee = _valueBps;
-        emit SetSellTaxFee(_valueBps);
     }
 
 
-    /**
-     * @dev setTeamsContract
-     * @param _contractAddress the contract address 
-     *
-    function setTeamsContract(address _contractAddress)  public onlyOwner { 
-        teamsContract = ITeams(_contractAddress);
-        emit SetTeamsContract(_contractAddress);
-    }*/
-
-
-    /**
-     * @dev setPerAccountExtraTax
-     * @param _account the account to add the extra tax
-     * @param _valueBps the extra tax in basis point system
-     */
-     function setPerAccountExtraTax(address _account, uint256 _valueBps) public onlyOwner {
-        perAccountExtraTax[_account] = _valueBps;
-        emit SetPerAccountExtraTax(_account, _valueBps);
-     }
 
     //////////////////////////// END  SETTER /////////////////
 
@@ -814,11 +568,9 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
         uint256 fee = 0;
 
-        if(isAutoBurnEnabled){ fee += autoBurnFee; }
         if(isBuyBackEnabled){ fee += buyBackFee; }
         if(isAutoLiquidityEnabled){ fee += autoLiquidityFee; }
         if(isHoldlersRewardEnabled){ fee += holdlersRewardFee; }
-        if(isLiquidityProvidersIncentiveEnabled){ fee += liquidityProvidersIncentiveFee; }
         if(isSellTaxEnabled) { fee += sellTaxFee; }
         if(isDevFeeEnabled) { fee += devFee; }
         if(isMarketingFeeEnabled) { fee += marketingFee; }
@@ -826,44 +578,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         return fee;
     } //end function
 
-    /**
-     * get fee by user
-     * @param _account user account's address
-     */
-    function getAccountFee(address _account) public view returns(uint256){
-        return (getTotalFee().add(perAccountExtraTax[_account]));
-    }
-   
-    /**
-     * @dev set max transfer limit in percentage
-     * @param _valueBps the max transfer limit value in basis point system
-     */
-    function setMaxTxAmountLimitPercent(uint256 _valueBps) public onlyOwner {
-        maxTxAmountLimitPercent = _valueBps;
-        emit SetMaxTxAmountLimitPercent(_valueBps);
-    }
-
-    /**
-     * @dev types of Tx for Tx amount Limit
-     * @param _txType the transaction type
-     */
-    function setTxTypeForMaxTxAmountLimit(bytes32 _txType) public onlyOwner {
-
-        require(
-
-            _txType == swapEngine.TX_SELL() ||
-            _txType == swapEngine.TX_BUY() ||
-            _txType == swapEngine.TX_ADD_LIQUIDITY() ||
-            _txType == swapEngine.TX_REMOVE_LIQUIDITY() ||
-            _txType == swapEngine.TX_TRANSFER() ||
-            _txType == keccak256(abi.encodePacked("TX_ALL")),
-            "PBULL: INVALID_TX_TYPE"
-        );
-
-        txTypeForMaxTxAmountLimit = _txType;
-
-        emit SetTxTypeForMaxTxAmountLimit(_txType);
-    }
 
     /**
      * @dev set holders reward computer contract called HoldlEffect
@@ -872,7 +586,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     function setHoldlersRewardComputer(address _contractAddress) public onlyOwner {
         require(_contractAddress != address(0),"PBULL: SET_HOLDLERS_REWARD_COMPUTER_INVALID_ADDRESS");
         holdlersRewardComputer = IHoldlersRewardComputer(_contractAddress);
-        emit SetHoldlersRewardComputer(_contractAddress);
     }
 
 
@@ -888,13 +601,12 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
         excludedFromFees[_swapEngineContract]                =  true;
         excludedFromRewards[_swapEngineContract]             =  true;
-        excludedFromMaxTxAmountLimit[_swapEngineContract]    =  true;
+      // excludedFromMaxTxAmountLimit[_swapEngineContract]    =  true;
         excludedFromPausable[_swapEngineContract]            =  true;
 
         // lets reset setUniswapRouter
         setUniswapRouter(uniswapRouter);
 
-        emit SetSwapEngine(_swapEngineContract);
     }
 
 
@@ -916,8 +628,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         // lets disable rewards for uniswap pair and router
         excludedFromRewards[_uniswapRouter] = true;
         excludedFromRewards[uniswapPair] = true;
-
-        emit SetUniSwapRouter(_uniswapRouter);
     } 
 
 
@@ -929,7 +639,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function excludeFromFees(address _account, bool _option) public onlyOwner {
         excludedFromFees[_account] = _option;
-        emit ExcludeFromFees(_account, _option);
     }
 
     /**
@@ -938,17 +647,9 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function excludeFromRewards(address _account, bool _option) public onlyOwner {
         excludedFromRewards[_account] = _option;
-        emit ExcludeFromRewards(_account, _option);
     }
 
-    /**
-     * @dev exclude or include  an account from max transfer limits
-     * @param _option true to exclude, false to include
-     */
-    function excludeFromMaxTxAmountLimit(address _account, bool _option) public onlyOwner {
-        excludedFromMaxTxAmountLimit[_account] = _option;
-        emit ExcludeFromMaxTxAmountLimit(_account, _option);
-    }
+
 
 
     /**
@@ -957,7 +658,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function excludeFromPausable(address _account, bool _option) public onlyOwner {
         excludedFromPausable[_account] = _option;
-        emit ExcludeFromPaused(_account, _option);
     }
 
     //////////////////// END EXCLUDES ///////////////////
@@ -969,7 +669,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setMinAmountBeforeAutoLiquidity(uint256 _amount) public onlyOwner {
         minAmountBeforeAutoLiquidity = _amount;
-        emit SetMinAmountBeforeAutoLiquidity(_amount);
     }
 
     /**
@@ -978,7 +677,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setMinAmountBeforeAutoBurn(uint256 _amount) public onlyOwner {
         minAmountBeforeAutoBurn = _amount;
-        emit SetMinAmountBeforeAutoBurn(_amount);
     }
 
 
@@ -988,7 +686,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setMinAmountBeforeSellingETHForBuyBack(uint256 _amount) public onlyOwner {
         minAmountBeforeSellingETHForBuyBack = _amount;
-        emit SetMinAmountBeforeSellingETHForBuyBack(_amount);
     }
 
     /**
@@ -997,7 +694,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setMinAmountBeforeSellingTokenForBuyBack(uint256 _amount) public onlyOwner {
         minAmountBeforeSellingTokenForBuyBack = _amount;
-        emit SetMinAmountBeforeSellingTokenForBuyBack(_amount);
     }
 
     /**
@@ -1006,7 +702,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setBuyBackETHAmountSplitDivisor(uint256 _value) public onlyOwner {
         buyBackETHAmountSplitDivisor = _value;
-        emit SetBuyBackETHAmountSplitDivisor(_value);
     }
 
     /**
@@ -1015,7 +710,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setMinPercentageOfholdlersRewardReservedPoolToMainPool(uint256 _valueBps) public onlyOwner {
         minPercentageOfholdlersRewardReservedPoolToMainPool  = _valueBps;
-        emit SetMinPercentageOfholdlersRewardReservedPoolToMainPool(_valueBps);
     }//end fun 
 
 
@@ -1025,7 +719,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function setPercentageShareOfHoldlersRewardsForReservedPool(uint256 _valueBps) public onlyOwner {
         percentageShareOfHoldlersRewardsForReservedPool = _valueBps;
-        emit SetPercentageShareOfHoldlersRewardsForReservedPool(_valueBps);
     }//end fun 
 
 
@@ -1038,7 +731,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function pauseContract(bool _option) public onlyOwner {
         isPaused = _option;
-        emit  PauseContract(_option);
     }
 
     /**
@@ -1179,25 +871,8 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         // lets update holdlers info
         updateHoldlersInfo(sender, recipient);
 
-        /*/ if faction is enabled, lets log the transfer tx
-        if(isTeamsEnabled && address(teamsContract) != address(0)) {
-            teamsContract.logTransferTx(txType, _msgSender(), sender, recipient, amount, amountMinusFees);
-        }*/
-        
-        //emit Transfer(sender, recipient, amountMinusFees);
     } //end 
 
-    /**
-     * tx type to string for testing only
-     * @param _txType the transaction type
-     *
-    function txTypeToString(bytes32 _txType) public view returns (string memory) {
-        if(_txType == swapEngine.TX_BUY()) { return "BUY_TRANSACTION"; }
-        else if(_txType == swapEngine.TX_SELL()){ return "SELL_TRANSACTION"; }
-        else if(_txType == swapEngine.TX_ADD_LIQUIDITY()){ return "ADD_LIQUIDITY_TRANSACTION"; }
-        else if(_txType == swapEngine.TX_REMOVE_LIQUIDITY()){ return "REMOVE_TRANSACTION"; }
-        else { return "TRANSFER_TRANSACTION"; }
-    } */
 
     /**
      * @dev pre process transfer before the main transfer is done
@@ -1217,59 +892,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
             return amount;
         }
 
-        // max transfer limit
-        if( txType == txTypeForMaxTxAmountLimit || txTypeForMaxTxAmountLimit == keccak256(abi.encodePacked("TX_ALL")) ){
-
-            // if max transfer limit is set, if the amount to process exceeds the limit per transfer
-            if( isMaxTxAmountLimitEnabled && !excludedFromMaxTxAmountLimit[sender]){
-
-                uint256 _maxTxAmountLimit = _getMaxTxAmountLimit();
-                
-                // amount should be less than _maxTxAmountLimit
-                require(amount < _maxTxAmountLimit, string(abi.encodePacked("PBULL: AMOUNT_EXCEEDS_TRANSFER_LIMIT"," ", bytes32(_maxTxAmountLimit) )) );
-            } // end if max transfer limit is set
-        
-        } // end if txType is not sell 
-
-
-        // we shuld throttle all except buys order 
-        if( txType != swapEngine.TX_BUY() ) {
-
-            // lets check if the account's address has been thorttled
-            StructsDef.AccountThrottleInfo storage throttledAccountInfo = throttledAccounts[sender];
-
-            // if the tx is actually throttled
-            if(throttledAccountInfo.timeIntervalPerTx > 0) {
-
-                // if the lastTxTime is 0, means its the first tx no need to check
-                if(throttledAccountInfo.lastTxTime > 0) {
-
-                    uint256 lastTxDuration = (block.timestamp - throttledAccountInfo.lastTxTime);    
-
-                    // lets now check the last tx time is less than the 
-                    if(lastTxDuration  < throttledAccountInfo.timeIntervalPerTx ) {
-                        uint256 nextTxTimeInSecs = (throttledAccountInfo.timeIntervalPerTx.sub(lastTxDuration)).div(1000);
-                        revert( string(abi.encodePacked("PBULL:","ACCOUNT_THROTTLED_SEND_AFTER_", nextTxTimeInSecs ,"_SECS")) );
-                    } //end if
-                } //end if we have last tx
-
-                //lets check the txAmountLimitPercent limit
-                if(throttledAccountInfo.txAmountLimitPercent > 0){
-                    
-                    // we shouldnt match against total supply, but his or her balance
-                    uint256 _throttledTxAmountLimit = percentToAmount(throttledAccountInfo.txAmountLimitPercent, balanceOf(sender));
-
-                    if(amount > _throttledTxAmountLimit) {
-                        revert( string(abi.encodePacked("PBULL:","ACCOUNT_THROTTLED_AMOUNT_EXCEEDS_", _throttledTxAmountLimit)) );
-                    }
-
-                } //end amount limit
-
-                // update last tx time
-                throttledAccounts[sender].lastTxTime = block.timestamp;
-            } //end if tx is throttled
-
-        } //end if its not buy tx
 
 
         // if sender is excluded from fees
@@ -1282,12 +904,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
         uint256 totalTxFee = getTotalFee();
 
-        /// lets check if user has extra tax
-        uint256 accountExtraTax = perAccountExtraTax[sender];
-
-        if(accountExtraTax > 0) {
-           totalTxFee = totalTxFee.add(accountExtraTax);
-        }
 
         if(txType != swapEngine.TX_SELL()  && sellTaxFee > 0) {
             totalTxFee = totalTxFee.sub(sellTaxFee);
@@ -1302,23 +918,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
         // take the fee amount from the amount
         uint256 amountMinusFee = amount.sub(totalFeeAmount);
-
-
-        //process burn , here, the burn is not immediately carried out
-        // we provide a strategy to handle the burn from time to time
-        if(isAutoBurnEnabled && autoBurnFee > 0) {
-            autoBurnPool = autoBurnPool.add(percentToAmount(autoBurnFee, amount) );
-        } //end process burn 
-
-
-        //compute amount for liquidity providers fund
-        if(isLiquidityProvidersIncentiveEnabled && liquidityProvidersIncentiveFee > 0) {
-            
-            //lets burn this as we will auto mint lp rewards for the staking pools
-            uint256 lpFeeAmount = percentToAmount( liquidityProvidersIncentiveFee, amount);
-
-            autoBurnPool = autoBurnPool.add(lpFeeAmount);  
-        } //end if
 
         uint256 devFeeAmount;
 
@@ -1336,25 +935,8 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         uint256 devAndMarketingAmt = devFeeAmount.add(marketingFeeAmount);
 
         if(devAndMarketingAmt > 0) {
-             __swapTokenForETH(devAndMarketingAmt, devAndMarketingWallet);
+            //__swapTokenForETH(devAndMarketingAmt, devAndMarketingWallet);
         }
-
-        //lets do some burn now 
-        if(minAmountBeforeAutoBurn > 0 && autoBurnPool >= minAmountBeforeAutoBurn) {
-            
-            uint256 amountToBurn = autoBurnPool;
-            
-            _burn(_tokenAddress, amountToBurn);
-            
-            //this part is updated in _burn function
-            /*if(autoBurnPool > amountToBurn){
-                autoBurnPool = autoBurnPool.sub(amountToBurn);
-            } else {
-                autoBurnPool = 0;
-            }*/
-
-            //totalTokenBurns = totalTokenBurns.add(amountToBurn);
-        } //end auto burn 
 
         /////////////////////// START BUY BACK ////////////////////////
 
@@ -1516,12 +1098,8 @@ contract PBull is   Context, Ownable, ERC20, Commons {
                 amountToSellETH = 0;
             }
 
-
             //lets buy bnb and burn 
             uint256 totalTokensFromBuyBack = __swapETHForToken(amountToBuyBackAndBurn);
-
-            //console.log("totalTokensFromBuyBack ===>>>>>>>>>>>>>>>>> ", totalTokensFromBuyBack);
-
 
             // lets add the tokens to burn
             autoBurnPool = autoBurnPool.add(totalTokensFromBuyBack);
@@ -1599,8 +1177,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
             rewardTokenContract.transfer(_account, reward);
         }
             
-        emit ReleaseAccountReward(_account, reward);
-
         return true;
     } //end function
 
@@ -1636,14 +1212,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      }
 
 
-    /**
-     * @dev get max Tx Amount limit 
-     * @return uint256  processed amount
-     */
-    function _getMaxTxAmountLimit() public view returns(uint256) {
-        return percentToAmount(maxTxAmountLimitPercent, totalSupply());
-    } //end fun 
-    
 
     /**
      * @dev getPercentageOfReservedToMainRewardPool

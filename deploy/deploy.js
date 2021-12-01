@@ -49,13 +49,19 @@ async function runDeployment(options = {}){
         console.log(await ethers.provider.getNetwork())
         console.log()
         
+        let hardhatRouter = "0x10ED43C718714eb63d5aA57B78B54704E256024E"
 
         //lets get some vars
-        if(["kovan","ethereum_mainnet","ropsten","rinkeby", "localhost","local","hardhat"].includes(networkName)){
+        if(["kovan","ethereum_mainnet","ropsten","rinkeby"].includes(networkName)){
             
             uniswapV2Router = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
         } 
-        else if(networkName == "bsc_mainnet"){ //pancake swap
+
+        /// localhost or hardhat
+        else if(["localhost","local","hardhat"].includes(networkName)){
+            uniswapV2Router = hardhatRouter;
+        }
+        else if(["bsc_mainnet"].includes(networkName)) { //pancake swap
             
             uniswapV2Router = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 

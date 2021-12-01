@@ -195,13 +195,15 @@ contract SwapEngine is Context, Ownable, Commons {
         path[0] = address(tokenContract);
         path[1] = uniswapRouter.WETH();
 
+        console.log("__swapTokenForETH _amountToken ===>>>>", _amountToken);
+
         tokenContract.approve(address(uniswapRouter), _amountToken);
 
         uint256  _curETHBalance = address(this).balance;
 
         uniswapRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
             _amountToken,
-            0, // accept any amoun
+            0, // accept any amount
             path,
             address(this), // send token contract
             block.timestamp.add(360)
@@ -218,12 +220,12 @@ contract SwapEngine is Context, Ownable, Commons {
             }
         }
 
-        /*
+        console.log("swapEngineAddress TRANSFER_SUCCESS ======>>>>>");
         console.log( "swapEngineAddress ===>>> ", address(this) );
         console.log("__swapTokenForETH::to ===>>>> ", _to);
         console.log("__swapTokenForETH::returnedETHAmount ===>>>> ", returnedETHAmount);
         console.log("__swapTokenForETH::balance", address(this).balance );
-        */
+        
 
         emit SwapTokenForETH(_amountToken, returnedETHAmount, _to);
 
@@ -321,9 +323,9 @@ contract SwapEngine is Context, Ownable, Commons {
 
         uint256 _recipientNewTokenBalance = _newTokenContract.balanceOf(_tokenRecipient);
 
-         console.log("_newTokenAddress===>>", _newTokenAddress);    
-         console.log("_tokenAmount===>>", _tokenAmount);    
-          console.log("_tokenRecipient===>>", _tokenRecipient); 
+        // console.log("_newTokenAddress===>>", _newTokenAddress);    
+        // console.log("_tokenAmount===>>", _tokenAmount);    
+        //console.log("_tokenRecipient===>>", _tokenRecipient); 
 
         uniswapRouter.swapExactTokensForTokensSupportingFeeOnTransferTokens(
             _tokenAmount,
@@ -336,7 +338,7 @@ contract SwapEngine is Context, Ownable, Commons {
         // total tokens bought
         uint256 _newTokensReceieved = _newTokenContract.balanceOf(_tokenRecipient).sub(_recipientNewTokenBalance);
 
-        console.log("_newTokensReceieved===>>", _newTokensReceieved);    
+        //console.log("_newTokensReceieved===>>", _newTokensReceieved);    
 
         return _newTokensReceieved;
     } //end
