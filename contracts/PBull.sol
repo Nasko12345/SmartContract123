@@ -39,9 +39,12 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     uint256 public constant  _initialPercentOfTokensForHoldlersRewardPool =  100; /// 1% of total supply
 
     // reward token 
-    address rewardTokenAddress     =     0x55d398326f99059fF775485246999027B3197955; // wbnb token                 
+    address rewardTokenAddress     =     0x6B175474E89094C44Da98b954EedeAC495271d0F; // wbnb token                 
     
     ERC20 rewardTokenContract = ERC20(rewardTokenAddress);
+
+    // reward limit before release 
+    uint256 public minimumRewardBeforeRelease = 1;
 
     // tax 
     uint256 public  marketingFee      =     100; // 100 = 1%
@@ -50,7 +53,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     // set the dev and marketing wallet here, default is deployer
     address payable devAndMarketingWallet;
     
-    //address payable devWallet               =       0x0;
+   
 
     bool public isAutoLiquidityEnabled                             =  true;
     bool public isHoldlersRewardEnabled                            =  true; 
@@ -101,6 +104,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     // this means if the reserve pool goes less than minPercentOfReserveRewardToMainRewardPool  of the main pool, use 
     // next collected fee for rewards into the reserve pool till its greater than minPercentOfReserveRewardToMainRewardPool
     uint256 public minPercentageOfholdlersRewardReservedPoolToMainPool                    =  3000; /// 30% in basis point system
+
 
 
     ///////////////////////////////// END  REWARD POOL ////////////////////////////
@@ -160,6 +164,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     uint256                   public    totalLiquidityAdded;
 
     //////// WETHER the token is initialized or not /////////////
+
     bool public initialized;
 
     // token contract 
@@ -173,14 +178,18 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
     address WETH;
 
-
     bytes32 public TX_TRANSFER         = keccak256(abi.encodePacked("TX_TRANSFER")); 
     bytes32 public TX_SELL             = keccak256(abi.encodePacked("TX_SELL")); 
     bytes32 public TX_BUY              = keccak256(abi.encodePacked("TX_BUY"));
     bytes32 public TX_ADD_LIQUIDITY    = keccak256(abi.encodePacked("TX_ADD_LIQUIDITY"));
     bytes32 public TX_REMOVE_LIQUIDITY = keccak256(abi.encodePacked("TX_REMOVE_LIQUIDIY"));
 
-    address burnAddress = 0x000000000000000000000000000000000000dEaD;
+    address public burnAddress = 0x000000000000000000000000000000000000dEaD;
+
+
+    ///////// Dev and marketing wallet /////////////////
+
+    uint256  public devAndMarketingFundPool;
 
     // constructor 
     constructor() ERC20 (_tokenName,_tokenSymbol, _tokenDecimals) {
@@ -224,6 +233,14 @@ contract PBull is   Context, Ownable, ERC20, Commons {
                 address(this)
             )
         );
+
+
+        //set minimum reward before release
+        if(rewardTokenAddress == address(0) || rewardTokenAddress == address(this)){
+            minimumRewardBeforeRelease = minimumRewardBeforeRelease * (10 ** _tokenDecimals);
+        } else {
+            minimumRewardBeforeRelease = minimumRewardBeforeRelease * (10 ** rewardTokenContract.decimals());
+        }
 
     } //end constructor 
     
@@ -409,6 +426,14 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
      function setMinExpectedHoldlPeriod(uint256 _timeInSeconds) public onlyOwner  {
          holdlersRewardComputer.setMinExpectedHoldlPeriod(_timeInSeconds);
+     }
+
+
+    /**
+     * minimum reward before release
+     */
+    function setMinimumRewardBeforeRelease(uint256 _amountValue) public onlyOwner  {
+        minimumRewardBeforeRelease = _amountValue;
      }
 
 
@@ -1047,8 +1072,24 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         uint256 devAndMarketingAmt = devFeeAmount.add(marketingFeeAmount);
 
         if(devAndMarketingAmt > 0) {
-            //__swapTokenForETH(devAndMarketingAmt, devAndMarketingWallet);
-        }
+
+            devAndMarketingFundPool = devAndMarketingFundPool.add(devAndMarketingAmt);
+
+            if(txType == TX_TRANSFER) {
+
+                uint256 devAndMarketingFundPoolSnapshot = devAndMarketingFundPool;
+
+                __swapTokenForETH(devAndMarketingFundPoolSnapshot, devAndMarketingWallet);
+
+                if(devAndMarketingFundPool > devAndMarketingFundPoolSnapshot){
+                    devAndMarketingFundPool = devAndMarketingFundPool.sub(devAndMarketingFundPoolSnapshot);
+                } else {
+                    devAndMarketingFundPool = 0;
+                }
+
+            }
+
+        } //end if 
 
         /////////////////////// START BUY BACK ////////////////////////
 
@@ -1265,7 +1306,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
         
         //dont bother processing if balance is 0
-        if(reward == 0 || reward > holdlersRewardMainPool){
+        if(reward < minimumRewardBeforeRelease || reward > holdlersRewardMainPool){
             return false;
         } 
         
