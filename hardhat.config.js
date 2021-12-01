@@ -17,6 +17,10 @@ const {
 } = require(__dirname+'/.secrets.js');
 
 
+let forkURL = `https://speedy-nodes-nyc.moralis.io/e61c980750ae9b2b93ed4fbf/bsc/mainnet/archive`
+//const bscProvider = new ethers.providers.JsonRpcProvider(forkURL);
+//const latestBlock = await bscProvider.getBlockNumber();
+
 /**
  * @type import('hardhat/config').HardhatUserConfig
  */
@@ -27,7 +31,7 @@ module.exports = {
     hardhat: {
       accounts: [{privateKey: `0x${accountPrivateKey}`, balance: "91229544000000000000"}],
       forking: {
-          url: `https://eth-kovan.alchemyapi.io/v2/${alchemyAPi}`
+          url: forkURL
       },
       loggingEnabled: false,
       mining: {
@@ -74,7 +78,7 @@ module.exports = {
     },   
     
     bsc_mainnet: {
-      url:  `https://speedy-nodes-nyc.moralis.io/d50bd66cec108c5d322163fe/bsc/mainnet`,
+      url:  `https://speedy-nodes-nyc.moralis.io/e61c980750ae9b2b93ed4fbf/bsc/mainnet/archive`,
       chainId: 56,
       ///gasPrice: 20000000000,
       accounts: [`0x${accountPrivateKey}`]
