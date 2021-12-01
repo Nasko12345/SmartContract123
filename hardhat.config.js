@@ -17,7 +17,7 @@ const {
 } = require(__dirname+'/.secrets.js');
 
 
-let forkURL = `https://speedy-nodes-nyc.moralis.io/e61c980750ae9b2b93ed4fbf/bsc/mainnet/archive`
+let forkURL = `https://eth-mainnet.alchemyapi.io/v2/${alchemyAPi}`
 //const bscProvider = new ethers.providers.JsonRpcProvider(forkURL);
 //const latestBlock = await bscProvider.getBlockNumber();
 

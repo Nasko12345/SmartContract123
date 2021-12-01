@@ -49,7 +49,7 @@ async function runDeployment(options = {}){
         console.log(await ethers.provider.getNetwork())
         console.log()
         
-        let hardhatRouter = "0x10ED43C718714eb63d5aA57B78B54704E256024E"
+        let hardhatRouter = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
 
         //lets get some vars
         if(["kovan","ethereum_mainnet","ropsten","rinkeby"].includes(networkName)){
@@ -118,26 +118,26 @@ async function runDeployment(options = {}){
         deployedContractsObj["holdlersRewardComputer"] = holdlersRewardComputer;
 
 
-        Utils.infoMsg("Deploying SwapEngine contract");
+        //Utils.infoMsg("Deploying SwapEngine contract");
 
-        //deploying  swapEngine.sol
+        /*/deploying  swapEngine.sol
         let deployedSwapEngine = await deploy('SwapEngine', {
             from: account,
             args: [tokenContractAddress, uniswapV2Router],
             log:  false
-        });
+        });*/
 
-        printDeployedInfo("SwapEngine", deployedSwapEngine);
+       // printDeployedInfo("SwapEngine", deployedSwapEngine);
 
-        let swapEngineAddress = deployedSwapEngine.address;
+        //let swapEngineAddress = deployedSwapEngine.address;
 
-        deployedContractsObj["swapEngine"] = swapEngineAddress;
+       // deployedContractsObj["swapEngine"] = swapEngineAddress;
 
-        console.log("deployedContractsObj ==>> ", deployedContractsObj)
+       // console.log("deployedContractsObj ==>> ", deployedContractsObj)
 
         let _initializeParams = [
             uniswapV2Router,  
-            swapEngineAddress,
+           // swapEngineAddress,
             holdlersRewardComputer
         ];
 
@@ -166,9 +166,7 @@ async function runDeployment(options = {}){
 
 
         if(["localhost","local","hardhat"].includes(networkName)) {
-
-            let swapEngineInstance = await ethers.getContract("SwapEngine", account);
-            await handleTestNetOperations(account, tokenContractInstance, swapEngineInstance, isTestCase);
+            await handleTestNetOperations(account, tokenContractInstance, isTestCase);
         }
 
         //adding first liquidity
@@ -220,7 +218,6 @@ async function publishToEtherscan(contractAddress){
 async function handleTestNetOperations(
     account,
     tokenContractInstance,
-    swapEngineInstance,
     isTestCase
 ) {
 
@@ -272,17 +269,27 @@ async function handleTestNetOperations(
             baseAssetAmountWei = ethers.utils.parseEther(baseAssetAmount.toString());
         }
         
-        Utils.infoMsg(`Approving Token on : ${swapEngineInstance.address}`);
+        //Utils.infoMsg(`Approving Token on : ${tokenContractInstance.address}`);
+
+        let userBalance = await tokenContractInstance.balanceOf(account);
+
+        console.log("userBalance   ====>>>", userBalance.toString())
+        console.log("tokenAMountWei====>>>", tokenAMountWei.toString())
 
         //lets approve the swap engine cntract first
-        let approveSwapEngineTx =  await tokenContractInstance.approve(swapEngineInstance.address, tokenAMountWei);
+        //let approveTx =  await tokenContractInstance.approve(tokenContractInstance.address, userBalance);
 
-        approveSwapEngineTx.wait();
+        //approveTx.wait();
 
-        Utils.successMsg(`Token Approval Successful: ${approveSwapEngineTx.hash}`);
+       // Utils.successMsg(`Token Approval Successful: ${approveTx.hash}`);
 
+        let sendTx =   await tokenContractInstance.transfer(tokenContractInstance.address, tokenAMountWei);
+
+        sendTx.wait();
+
+        Utils.successMsg(`sendTx Successful: ${sendTx.hash}`);
        
-        let addLiquidityResult = await swapEngineInstance.addInitialLiquidity(
+        let addLiquidityResult = await tokenContractInstance.addInitialLiquidity(
                                 tokenAMountWei, 
                                 {value: baseAssetAmountWei, gasLimit: 6000000, gasPrice:  ethers.utils.parseUnits('40', 'gwei') }
         );

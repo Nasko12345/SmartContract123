@@ -15,9 +15,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IHoldlersRewardComputer.sol";
 import "./StructsDef.sol";
 import "./Commons.sol";
-import "./interfaces/ISwapEngine.sol";
-//import "hardhat/console.sol";
-//import "./interfaces/ITeams.sol";
+//import "./interfaces/ISwapEngine.sol";
+import "./libs/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "./libs/@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import "./libs/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "hardhat/console.sol";
+
 
 contract PBull is   Context, Ownable, ERC20, Commons {
 
@@ -36,7 +39,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     uint256 public constant  _initialPercentOfTokensForHoldlersRewardPool =  100; /// 1% of total supply
 
     // reward token 
-    address rewardTokenAddress     =     0x4F96Fe3b7A6Cf9725f59d353F723c1bDb64CA6Aa; // wbnb token                 
+    address rewardTokenAddress     =     0x55d398326f99059fF775485246999027B3197955; // wbnb token                 
     
     ERC20 rewardTokenContract = ERC20(rewardTokenAddress);
 
@@ -77,16 +80,19 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
     // funds pool
     uint256  public autoLiquidityPool;
-    uint256  public autoBurnPool;
+    //uint256  public autoBurnPool;
     uint256  public liquidityProvidersIncentivePool;
 
     //////////////////////////////// START REWARD POOL ///////////////////////////
+
+    // token pool to sell or credit to the main pools
+    uint256  public pendingRewardTokenPool;
+
     uint256  public holdlersRewardMainPool;
     
     // reward pool reserve  used in replenishing the main pool any time someone withdraw else
     // the others holdlers will see a reduction  in rewards
     uint256  public holdlersRewardReservedPool;
-
 
     ////// percentage of reward we should allocate to  reserve pool
     uint256  public percentageShareOfHoldlersRewardsForReservedPool                       =  3000; /// 30% in basis point system
@@ -125,7 +131,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
     ////////////////// END MAPS ////////////////
 
-
     uint256 public totalRewardsTaken;
 
     bool isSwapAndLiquidifyLocked;
@@ -148,11 +153,9 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
     // external contracts 
     IHoldlersRewardComputer   public    holdlersRewardComputer;
-    ISwapEngine               public    swapEngine;
+   // ISwapEngine               public    swapEngine;
     //ITeams                    public    teamsContract;
-    
-    address                   public    uniswapRouter;
-    address                   public    uniswapPair;
+
 
     uint256                   public    totalLiquidityAdded;
 
@@ -161,6 +164,23 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
     // token contract 
     address public immutable _tokenAddress;
+
+
+    IUniswapV2Router02 public uniswapRouter;
+    address  public uniswapPair;
+
+    IUniswapV2Pair public uniswapPairContract;
+
+    address WETH;
+
+
+    bytes32 public TX_TRANSFER         = keccak256(abi.encodePacked("TX_TRANSFER")); 
+    bytes32 public TX_SELL             = keccak256(abi.encodePacked("TX_SELL")); 
+    bytes32 public TX_BUY              = keccak256(abi.encodePacked("TX_BUY"));
+    bytes32 public TX_ADD_LIQUIDITY    = keccak256(abi.encodePacked("TX_ADD_LIQUIDITY"));
+    bytes32 public TX_REMOVE_LIQUIDITY = keccak256(abi.encodePacked("TX_REMOVE_LIQUIDIY"));
+
+    address burnAddress = 0x000000000000000000000000000000000000dEaD;
 
     // constructor 
     constructor() ERC20 (_tokenName,_tokenSymbol, _tokenDecimals) {
@@ -212,29 +232,17 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      * initialize the project
      * @param  _uniswapRouter the uniswap router
      * @param  _holdlersRewardComputer the holdlers reward computer
-     *  @param  _swapEngine the swap engine address
      */
     function _initializeContract (
         address  _uniswapRouter, 
-        address  _swapEngine,
         address  _holdlersRewardComputer
     )  public onlyOwner {
         
         require(!initialized, "PBULL: ALREADY_INITIALIZED");
-        require(_uniswapRouter != address(0), "PBULL: INVALID_UNISWAP_ROUTER");
-        require(_swapEngine != address(0), "PBULL: INVALID_SWAP_ENGINE_CONTRACT");
         require(_holdlersRewardComputer != address(0), "PBULL: INVALID_HOLDLERS_REWARD_COMPUTER_CONTRACT");
 
-        // set _uniswapRouter
-        uniswapRouter = _uniswapRouter;
-
         // this will update the uniswap router again
-        setSwapEngine(_swapEngine);
-
-        // exclude swap engine from all limits
-        excludedFromFees[_swapEngine]                  =  true;
-        excludedFromRewards[_swapEngine]               =  true;
-        excludedFromPausable[_swapEngine]              =  true;
+        setUniswapRouter(_uniswapRouter);
 
         holdlersRewardComputer = IHoldlersRewardComputer(_holdlersRewardComputer);
 
@@ -328,11 +336,11 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      **/
     function balanceOf(address _account) override public view returns(uint256) {
 
-        if(!(rewardTokenAddress == address(0) || rewardTokenAddress == address(this))) {
-            return super.balanceOf(_account);
-        }
-
         uint256 accountBalance = super.balanceOf(_account);
+
+        if(!( rewardTokenAddress == address(0) || rewardTokenAddress == address(this) )) {
+            return accountBalance;
+        }
 
         if(accountBalance <= 0){
             accountBalance = 0;
@@ -588,42 +596,34 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         holdlersRewardComputer = IHoldlersRewardComputer(_contractAddress);
     }
 
-
-    /**
-     * @dev set the token swap engine
-     * @param _swapEngineContract the contract address of the swap engine
-     */
-    function setSwapEngine(address _swapEngineContract)  public onlyOwner {
-        
-        require(_swapEngineContract != address(0),"PBULL: SET_SWAP_ENGINE_INVALID_ADDRESS");
-        
-        swapEngine = ISwapEngine(_swapEngineContract);
-
-        excludedFromFees[_swapEngineContract]                =  true;
-        excludedFromRewards[_swapEngineContract]             =  true;
-      // excludedFromMaxTxAmountLimit[_swapEngineContract]    =  true;
-        excludedFromPausable[_swapEngineContract]            =  true;
-
-        // lets reset setUniswapRouter
-        setUniswapRouter(uniswapRouter);
-
-    }
-
-
      /**
      * @dev set uniswap router address
      * @param _uniswapRouter uniswap router contract address
      */
     function setUniswapRouter(address _uniswapRouter) public onlyOwner {
         
-        require(_uniswapRouter != address(0), "PBULL: INVALID_ADDRESS");
+        require(_uniswapRouter != address(0), "PBULL#SWAP_ENGINE: ZERO_ADDRESS");
 
-        uniswapRouter = _uniswapRouter;
+        if(_uniswapRouter == address(uniswapRouter)){
+            return;
+        }
 
-        //set uniswap address
-        swapEngine.setUniswapRouter(_uniswapRouter);
-       
-        uniswapPair = swapEngine.getUniswapPair();
+        address _oldRouter = address(uniswapRouter);
+          
+        uniswapRouter = IUniswapV2Router02(_uniswapRouter);
+
+        IUniswapV2Factory uniswapFactory = IUniswapV2Factory(uniswapRouter.factory());
+
+        WETH = uniswapRouter.WETH();
+
+        uniswapPair = uniswapFactory.getPair( address(this), WETH);
+        
+        if(uniswapPair == address(0)) {
+            // Create a uniswap pair for this new token
+            uniswapPair = uniswapFactory.createPair( address(this), WETH);
+        }
+
+        uniswapPairContract = IUniswapV2Pair(uniswapPair);
 
         // lets disable rewards for uniswap pair and router
         excludedFromRewards[_uniswapRouter] = true;
@@ -722,8 +722,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     }//end fun 
 
 
-
-
     ////////// START SWAP AND LIQUIDITY ///////////////
 
     /**
@@ -733,50 +731,82 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         isPaused = _option;
     }
 
-    /**
-    * @dev lets swap token for chain's native asset 
-    * this is bnb for bsc, eth for ethereum and ada for cardanno
-    * @param _amountToken the amount of tokens to swap for ETH
-    */
-    function __swapTokenForETH(uint256 _amountToken, address payable _to) private  lockSwapAndLiquidify returns(uint256) {
 
-        require(address(swapEngine) != address(0), "PBULL: SWAP_ENGINE_NOT_SET_CONTACT_DEVS");
+    /**
+    * @dev lets swap token for chain's native asset, this is bnb for bsc, eth for ethereum and ada for cardanno
+    * @param _amountToken the token amount to swap to native asset
+    */
+    function __swapTokenForETH(uint256 _amountToken, address payable _to) private lockSwapAndLiquidify returns(uint256) {
 
         if( _amountToken > realBalanceOf(_tokenAddress) ) {
             return 0;
         }
 
-        //lets move the token to swap engine first
-        internalTransfer(_tokenAddress, address(swapEngine), _amountToken, "SWAP_TOKEN_FOR_ETH_ERROR", false);
+        require(_to != address(0), "PBULL_SWAP_ENGINE#swapTokenForETH: INVALID_TO_ADDRESS");
+
+        address[] memory path = new address[](2);
+
+        path[0] = address(this);
+        path[1] = WETH;
+
+        super._approve(address(this), address(uniswapRouter), _amountToken);
+
+        uint256  _curETHBalance = address(this).balance;
+
+        uniswapRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            _amountToken,
+            0, // accept any amount
+            path,
+            _to, // send token contract
+            block.timestamp.add(360)
+        );        
+
+        uint256 returnedETHAmount = uint256(address(this).balance.sub(_curETHBalance));
         
-        //now swap your tokens
-        return swapEngine.swapTokenForETH( _amountToken, _to );
-    }
+        return returnedETHAmount;
+    } //end
 
 
     /**
     * @dev lets swap token for chain's native asset 
     * this is bnb for bsc, eth for ethereum and ada for cardanno
     */
-    function __swapTokensForTokens(uint256 _tokenAmount, address _newTokenAddress)
-        private  
-        lockSwapAndLiquidify 
-        returns(uint256) 
-    {
+    function __swapTokensForRewardTokens(uint256 _tokenAmount) private lockSwapAndLiquidify returns(uint256) 
+    {   
 
-        require(address(swapEngine) != address(0), "PBULL: SWAP_ENGINE_NOT_SET_CONTACT_DEVS");
+        address tokenAddress = address(this);
 
-        if( _tokenAmount > realBalanceOf(address(this)) ) {
+        if( _tokenAmount == 0 || _tokenAmount > realBalanceOf(tokenAddress) ) {
             return 0;
         }
 
-        //lets move the token to swap engine first
-        internalTransfer(address(this), address(swapEngine), _tokenAmount, "SWAP_TOKEN_FOR_ETH_ERROR", false);
-        
-        //now swap your tokens
-        return swapEngine.swapTokensForTokens( _tokenAmount,  _newTokenAddress, address(this) );
-    }
+        super._approve(tokenAddress, address(uniswapRouter), _tokenAmount);
 
+        // work on the path
+        address[] memory path = new address[](3);
+
+        path[0] =  tokenAddress;
+        path[1] =  WETH;
+        path[2] =  rewardTokenAddress; 
+
+
+        uint256 _balanceSnapshot = rewardTokenContract.balanceOf(tokenAddress);
+
+         console.log("_balanceSnapshot===>>", _balanceSnapshot);    
+         console.log("_tokenAmount===>>", _tokenAmount);    
+        //console.log("_tokenRecipient===>>", _tokenRecipient); 
+
+        uniswapRouter.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            _tokenAmount,
+            0, // accept any amount
+            path,
+            tokenAddress,
+            block.timestamp.add(360)
+        );        
+
+        // total tokens bought
+        return rewardTokenContract.balanceOf(tokenAddress).sub(_balanceSnapshot);
+    }
 
 
     /**
@@ -785,42 +815,128 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
     function swapAndLiquidify(uint256 _amountToken) private lockSwapAndLiquidify {
         
-        require(address(swapEngine) != address(0), "PBULL: SWAP_ENGINE_NOT_SET_CONTACT_DEVS");
-
-        // lets check if we have to that amount else abort operation
-        if( _amountToken <= 0 || _amountToken > realBalanceOf(_tokenAddress) ){
+        if( _amountToken > realBalanceOf(address(this)) ) {
             return;
         }
-          
-        //lets move the token to swap engine first
-        internalTransfer(_tokenAddress, address(swapEngine), _amountToken, "SWAP_AND_LIQUIDIFY_ERROR", false);
         
-        (,,uint256 liquidityAdded) = swapEngine.swapAndLiquidify(_amountToken);
+        uint256 _amountTokenHalf = _amountToken.div(2);
+        
+        //lets swap to get some base asset
+        uint256 _amountETH = __swapTokenForETH( _amountTokenHalf, payable(address(this)) );
 
-        totalLiquidityAdded = totalLiquidityAdded.add(liquidityAdded);
+        if(_amountETH == 0){
+            return;
+        }
+
+        super._approve(address(this), address(uniswapRouter), _amountToken);
+
+        // add the liquidity
+        uniswapRouter.addLiquidityETH { value: _amountETH } (
+            address(this), //token contract address
+            _amountToken, // token amount to add liquidity
+            0, //amountTokenMin 
+            0, //amountETHMin
+            autoLiquidityOwner, //owner of the liquidity
+            block.timestamp.add(360) //deadline
+        );
 
      } //end function
 
 
     /**
-     * @dev buyback tokens with the native asset and burn
-     * @param _amountETH the total number of native asset to be used for buying back
-     * @return the number of tokens bought and burned
-     */
-    function __swapETHForToken(uint256 _amountETH) private lockSwapAndLiquidify returns(uint256) {
+    * @dev swap ETH for tokens 
+    * @param _amountETH amount to sell in ETH or native asset
+    * @param _to the recipient of the tokens
+    */
+    function __swapETHForToken(
+        uint256 _amountETH, 
+        ERC20 _tokenContract, 
+        address _to
+    ) private lockSwapAndLiquidify returns(uint256)  {
 
-        require(address(swapEngine) != address(0), "PBULL: SWAP_ENGINE_NOT_SET_CONTACT_DEVS");
+        address tokenAddress = address(_tokenContract);
 
-        // if we do not have enough eth, silently abort
-        if( _amountETH == 0 ||  _amountETH > _tokenAddress.balance ){
+        // work on the path
+        address[] memory path = new address[](2);
+
+        path[0] =  WETH;
+        path[1] =  tokenAddress; 
+
+        // lets get the current token balance of the _tokenRecipient 
+        uint256 _toBalance = _tokenContract.balanceOf(_to);
+
+        uniswapRouter.swapExactETHForTokensSupportingFeeOnTransferTokens {value: _amountETH} (
+            0, // accept any amount
+            path,
+            _to,
+            block.timestamp.add(360)
+        );    
+
+        uint256 newBalance = _tokenContract.balanceOf(_to);
+
+        if(newBalance <= _toBalance){
             return 0;
         }
 
-        // the first param is the amount of native asset to buy token with
-       // we want the tokens returned ... no burn address stuff
-        return swapEngine.swapETHForToken { value: _amountETH }( _amountETH, address(this) );
-    } 
-    ///////////// END SWAP AND LIQUIDITY ////////////
+        // total tokens bought
+        return newBalance.sub(_toBalance);
+
+    } //end
+
+
+    /**
+     * @dev isSellTx wether the transaction is a sell tx
+     * @param msgSender__ the transaction sender
+     * @param _txSender the transaction sender
+     * @param _txRecipient the transaction recipient
+     * @param _amount the transaction amount
+     */
+    function getTxType(
+        address  msgSender__,
+        address  _txSender, 
+        address  _txRecipient, 
+        uint256  _amount
+    ) private view  returns(bytes32) {
+        
+       
+       // add liquidity 
+       /*if(msgSender__ == address(uniswapRouter) && // msg.sender is same as uniswap router address
+           tokenContract.allowance(_txSender, address(uniswapRouter)) >= _amount && // and user has allowed 
+          _txRecipient == uniswapPair // to or recipient is the uniswap pair    
+        ) {
+            return TX_ADD_LIQUIDITY;
+        }
+
+        // lets check remove liquidity 
+        else*/
+        if (msgSender__ == address(uniswapRouter) && // msg.sender is same as uniswap router address
+            _txSender  ==  address(uniswapRouter) && // _from is same as uniswap router address
+            _txRecipient != uniswapPair 
+        ) {
+            return TX_REMOVE_LIQUIDITY;
+        } 
+
+         // lets detect sell
+        else if (msgSender__ == address(uniswapRouter) && // msg.sender is same as uniswap router address
+            allowance(_txSender, address(uniswapRouter)) >= _amount && // and user has allowed 
+             _txSender  !=  address(uniswapRouter) &&
+            _txRecipient == uniswapPair
+        ) {
+            return TX_SELL;
+        }
+        
+        // lets detect buy 
+        else if (msgSender__ == uniswapPair && // msg.sender is same as uniswap pair address
+            _txSender == uniswapPair  // transfer sender or _from is uniswap pair
+        ) {
+            return TX_BUY;
+        }
+
+        else {
+            return TX_TRANSFER;
+        }
+    } //end get tx type
+
 
 
     /**
@@ -855,7 +971,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
 
         //at this point lets get transaction type
-        bytes32 txType = swapEngine.getTxType(_msgSender(), sender, recipient, amount);
+        bytes32 txType = getTxType(_msgSender(), sender, recipient, amount);
 
         uint256 amountMinusFees = _processBeforeTransfer(sender, recipient, amount, txType);
 
@@ -884,11 +1000,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
 
          // dont tax some operations
-        if(txType    == swapEngine.TX_REMOVE_LIQUIDITY() || 
-           sender    == address(swapEngine)              || 
-           recipient == address(swapEngine)              ||
-           isSwapAndLiquidifyLocked == true             
-        ) {
+        if(txType    ==  TX_REMOVE_LIQUIDITY || isSwapAndLiquidifyLocked == true ) {
             return amount;
         }
 
@@ -905,7 +1017,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         uint256 totalTxFee = getTotalFee();
 
 
-        if(txType != swapEngine.TX_SELL()  && sellTaxFee > 0) {
+        if(txType !=  TX_SELL  && sellTaxFee > 0) {
             totalTxFee = totalTxFee.sub(sellTaxFee);
         } 
         
@@ -955,7 +1067,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
             
             //if tx is transfer only, lets do the sell or buy
-            if(txType == swapEngine.TX_TRANSFER()) {
+            if(txType == TX_TRANSFER) {
 
                 //take snapshot
                 uint256 amountToLiquidify = autoLiquidityPool;
@@ -982,65 +1094,75 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
         // so here lets check if its sell, lets get the sell tax amount
         // burn half and add half to 
-        if( txType == swapEngine.TX_SELL()  && isSellTaxEnabled && sellTaxFee > 0 ) {
+        if( txType == TX_SELL  && isSellTaxEnabled && sellTaxFee > 0 ) {
             
             uint256 sellTaxAmount = percentToAmount(sellTaxFee, amount);
 
-            sellTaxAmountSplit = sellTaxAmount.div(3);
+            sellTaxAmountSplit = sellTaxAmount.div(2);
 
             // lets add to be burned
-            autoBurnPool = autoBurnPool.add( sellTaxAmountSplit );
+            //autoBurnPool = autoBurnPool.add( sellTaxAmountSplit );
 
             // lets add to buyback pool
             buyBackTokenPool = buyBackTokenPool.add(sellTaxAmountSplit);
+
+            pendingRewardTokenPool  = pendingRewardTokenPool.add(sellTaxAmountSplit);
+
         }
 
           //compute amount for liquidity providers fund
         if(isHoldlersRewardEnabled && holdlersRewardFee > 0) {
            
-            uint256 holdlersRewardAmountInToken = percentToAmount(holdlersRewardFee, amount);
+            pendingRewardTokenPool  = pendingRewardTokenPool.add( percentToAmount(holdlersRewardFee, amount) );
 
-            // lets add half of the sell tax amount to reward pool
-            holdlersRewardAmountInToken  =  holdlersRewardAmountInToken.add(sellTaxAmountSplit);
+            if(txType == TX_TRANSFER && pendingRewardTokenPool > 0){
 
-            uint256 holdersRewardsAmountInRewardToken;
+                uint256 __pendingRewardTokenPoolSnapShot = pendingRewardTokenPool;
 
-            //if reward token isnt the same token, lets swap for the particular token 
-            if(rewardTokenAddress != address(this)){
-                
-                if(rewardTokenAddress == swapEngine.WETH()){
+                uint256 holdersRewardsAmountInRewardToken;
+
+                if(rewardTokenAddress == address(this)  || rewardTokenAddress == address(0)){
+                    holdersRewardsAmountInRewardToken = __pendingRewardTokenPoolSnapShot;
+                } 
+                else if(rewardTokenAddress == WETH){
                     //lets now convert to the particular tokens 
-                    holdersRewardsAmountInRewardToken = __swapTokenForETH(holdlersRewardAmountInToken, payable(address(this)));
+                    holdersRewardsAmountInRewardToken = __swapTokenForETH(__pendingRewardTokenPoolSnapShot, payable(address(this)));
                 } else {
-                    holdersRewardsAmountInRewardToken = __swapTokensForTokens(holdlersRewardAmountInToken, rewardTokenAddress );
+                    holdersRewardsAmountInRewardToken = __swapTokensForRewardTokens(__pendingRewardTokenPoolSnapShot);   
                 }
-            }
 
-            //if the holdlers rewards reserved pool is below what we want
-            // assign all the rewards to the reserve pool, the reserved pool is used for
-            // auto adjusting the rewards so that users wont get a decrease in rewards
-            if( holdlersRewardReservedPool == 0 || 
-                (holdlersRewardMainPool > 0 && getPercentageDiffBetweenReservedAndMainHoldersRewardsPools() <= minPercentageOfholdlersRewardReservedPoolToMainPool)
-             ){
-                holdlersRewardReservedPool = holdlersRewardReservedPool.add(holdersRewardsAmountInRewardToken);
-            
-            } else {
+                //reset pendingRewardTokenPool
+                if(pendingRewardTokenPool > __pendingRewardTokenPoolSnapShot){
+                    pendingRewardTokenPool = pendingRewardTokenPool.sub(__pendingRewardTokenPoolSnapShot);
+                } else {
+                    pendingRewardTokenPool = 0;
+                }
 
-                // lets calculate the share of rewards for the the reserve pool
-                uint256 reservedPoolRewardShare = percentToAmount(percentageShareOfHoldlersRewardsForReservedPool, holdersRewardsAmountInRewardToken);
+                //if the holdlers rewards reserved pool is below what we want
+                // assign all the rewards to the reserve pool, the reserved pool is used for
+                // auto adjusting the rewards so that users wont get a decrease in rewards
+                if( holdlersRewardReservedPool == 0 || 
+                    (holdlersRewardMainPool > 0 && getPercentageDiffBetweenReservedAndMainHoldersRewardsPools() <= minPercentageOfholdlersRewardReservedPoolToMainPool)
+                    ){
+                    holdlersRewardReservedPool = holdlersRewardReservedPool.add(holdersRewardsAmountInRewardToken);
 
-                holdlersRewardReservedPool = holdlersRewardReservedPool.add(reservedPoolRewardShare);
+                } else {
+
+                    // lets calculate the share of rewards for the the reserve pool
+                    uint256 reservedPoolRewardShare = percentToAmount(percentageShareOfHoldlersRewardsForReservedPool, holdersRewardsAmountInRewardToken);
+
+                    holdlersRewardReservedPool = holdlersRewardReservedPool.add(reservedPoolRewardShare);
+                    
+                    // set the main pool reward 
+                    holdlersRewardMainPool  = holdlersRewardMainPool.add(holdersRewardsAmountInRewardToken.sub(reservedPoolRewardShare));
+
+                } //end if 
                 
-                // set the main pool reward 
-                holdlersRewardMainPool  = holdlersRewardMainPool.add(holdersRewardsAmountInRewardToken.sub(reservedPoolRewardShare));
 
-            } //end if 
+                //totalRewardsTaken = totalRewardsTaken.add(holdlersRewardAmountInToken);
+            } //end if its transfer 
 
-            totalRewardsTaken = totalRewardsTaken.add(holdlersRewardAmountInToken);
-
-
-           // console.log("holdersRewardsAmountInRewardToken ===>>>", holdersRewardsAmountInRewardToken);
-        } //end if 
+        } //end if we have reward enabled
 
 
         return amountMinusFee;
@@ -1059,7 +1181,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         
         // if we have less ether, then sell token to buy more ethers
         if( buyBackETHPool <= minAmountBeforeSellingETHForBuyBack ){
-            if( buyBackTokenPool >= minAmountBeforeSellingTokenForBuyBack && _txType == swapEngine.TX_TRANSFER() ) {
+            if( buyBackTokenPool >= minAmountBeforeSellingTokenForBuyBack && _txType == TX_TRANSFER ) {
                 
                 //console.log("in BuyBack Token Sell Zone ===>>>>>>>>>>>>>>>>> ");
 
@@ -1080,7 +1202,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         
         // lets work on the buyback
         // here lets get the amount of bnb to be used for buy back sender != uniswapPair
-        if( buyBackETHPool > minAmountBeforeSellingETHForBuyBack  && _txType == swapEngine.TX_TRANSFER() ) {
+        if( buyBackETHPool > minAmountBeforeSellingETHForBuyBack  && _txType == TX_TRANSFER ) {
 
             //console.log("BuyBackZone Entered ===>>>>>>>>>>>>>>>>> Hurrayyyyyyyyy");
             // use half of minAmountBeforeSellingETHForBuyBack to buy back
@@ -1099,10 +1221,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
             }
 
             //lets buy bnb and burn 
-            uint256 totalTokensFromBuyBack = __swapETHForToken(amountToBuyBackAndBurn);
-
-            // lets add the tokens to burn
-            autoBurnPool = autoBurnPool.add(totalTokensFromBuyBack);
+            uint256 totalTokensFromBuyBack = __swapETHForToken(amountToBuyBackAndBurn, this, burnAddress);
 
             totalBuyBacksAmountInTokens = totalBuyBacksAmountInTokens.add(totalTokensFromBuyBack);
 
@@ -1224,5 +1343,44 @@ contract PBull is   Context, Ownable, ERC20, Commons {
         // lets multiply by 100 to get the value in basis point system
         return (resultInPercent.mul(100));
      }
+
+
+    //add initial lp
+    bool _isAddInitialLiuqidityExecuted;
+
+     /**
+     * @dev add Initial Liquidity to swap exchange
+     * @param _amountToken the token amount 
+     */
+    function addInitialLiquidity(uint256 _amountToken ) external payable onlyOwner  {
+
+        require(address(uniswapRouter) != address(0), "PBULL_SWAP_ENGINE#addInitialLiquidity: UNISWAP_ROUTER_NOT_SET");
+
+        require(!_isAddInitialLiuqidityExecuted,"PBULL_SWAP_ENGINE#addInitialLiquidity: function already called");
+        require(msg.value > 0, "PBULL_SWAP_ENGINE#addInitialLiquidity: msg.value must exceed 0");
+        require(_amountToken > 0, "PBULL_SWAP_ENGINE#addInitialLiquidity: _amountToken must exceed  0");
+
+        require(payable(address(this)).send(msg.value), "PBULL_SWAP_ENGINE#addInitialLiquidity: Failed to move ETH to contract");
+
+         _isAddInitialLiuqidityExecuted = true;
+
+         //console.log("_amountToken=======>>>>", _amountToken);
+          //console.log("allowance  =======>>>>", allowance(_msgSender(), address(this)) );
+
+        //transferFrom(address(this), address(this), _amountToken);
+
+        _approve(address(this), address(uniswapRouter), _amountToken );
+
+        // add the liquidity
+        uniswapRouter.addLiquidityETH { value: msg.value } (
+            address(this), //token contract address
+            _amountToken, // token amount we wish to provide liquidity for
+            _amountToken, //amountTokenMin 
+            msg.value, //amountETHMin
+            _msgSender(), 
+            block.timestamp.add(360) //deadline
+        );
+
+    } //end add liquidity
 
 } //end contract

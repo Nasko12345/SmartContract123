@@ -303,16 +303,18 @@ contract SwapEngine is Context, Ownable, Commons {
         address     _tokenRecipient
     ) public returns(uint256)  {
 
+       require(address(uniswapRouter) != address(0), "PBULL_SWAP_ENGINE: UNISWAP_ROUTER_NOT_SET");
+
        // address _tokenContractAddress = address(tokenContract);
 
        tokenContract.approve(address(uniswapRouter), _tokenAmount);
 
         // work on the path
-        address[] memory path = new address[](3);
+        address[] memory path = new address[](2);
 
         path[0] =  address(tokenContract);
-        path[1] =  uniswapRouter.WETH();
-        path[2] =  _newTokenAddress; 
+       // path[1] =  uniswapRouter.WETH();
+        path[1] =  _newTokenAddress; 
 
        
         // lets get the current token balance of the _tokenRecipient 
