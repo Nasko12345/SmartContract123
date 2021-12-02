@@ -44,7 +44,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     ERC20 rewardTokenContract = ERC20(rewardTokenAddress);
 
     // reward limit before release 
-    uint256 public minimumRewardBeforeRelease = 1;
+    uint256 public rewardLimitBeforeRelease = 1 * (10 ** rewardTokenContract.decimals());
 
     // tax 
     uint256 public  marketingFee      =     100; // 100 = 1%
@@ -54,7 +54,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
     address payable devAndMarketingWallet;
     
    
-
     bool public isAutoLiquidityEnabled                             =  true;
     bool public isHoldlersRewardEnabled                            =  true; 
     bool public isBuyBackEnabled                                   =  true;
@@ -219,7 +218,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
         // set auto liquidity owner
         autoLiquidityOwner                              =       _msgSender();
-
+ 
         // set the deploymenet time
         deploymentTimestamp                             =       block.timestamp;
 
@@ -233,14 +232,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
                 address(this)
             )
         );
-
-
-        //set minimum reward before release
-        if(rewardTokenAddress == address(0) || rewardTokenAddress == address(this)){
-            minimumRewardBeforeRelease = minimumRewardBeforeRelease * (10 ** _tokenDecimals);
-        } else {
-            minimumRewardBeforeRelease = minimumRewardBeforeRelease * (10 ** rewardTokenContract.decimals());
-        }
 
     } //end constructor 
     
@@ -426,14 +417,6 @@ contract PBull is   Context, Ownable, ERC20, Commons {
      */
      function setMinExpectedHoldlPeriod(uint256 _timeInSeconds) public onlyOwner  {
          holdlersRewardComputer.setMinExpectedHoldlPeriod(_timeInSeconds);
-     }
-
-
-    /**
-     * minimum reward before release
-     */
-    function setMinimumRewardBeforeRelease(uint256 _amountValue) public onlyOwner  {
-        minimumRewardBeforeRelease = _amountValue;
      }
 
 
@@ -1306,7 +1289,7 @@ contract PBull is   Context, Ownable, ERC20, Commons {
 
         
         //dont bother processing if balance is 0
-        if(reward < minimumRewardBeforeRelease || reward > holdlersRewardMainPool){
+        if(reward == 0 || reward > holdlersRewardMainPool){
             return false;
         } 
         
